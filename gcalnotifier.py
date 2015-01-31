@@ -184,9 +184,35 @@ while True:
 			# If the start time of the event is reached, play out a speech synthesis corresponding to the event
 			expiration = now + timedelta(minutes=reminder_deltatime)
 			if start == expiration.strftime('%Y-%m-%dT%H:%M'):
+				
+				# send a (simulated) IR command to the audio controller, so that it can prepare for sound output (mute ongoing music or just turn on amplifier)
+				os.system('irsend simulate "0000000000004660 0 KEY_START_ANNOUNCE piremote"')
+				
+				# play "start of announce" jingle
+				time.sleep(1)
+				os.system('aplay audio_on.wav')
+
+				# Speak the calendar entry text
 				command = '{0} "{1}"'.format(TTS_SCRIPT, name)
 				logger.info('Event starting in %d minutes. Announcing \'%s\'...', reminder_deltatime, name)
 				os.system(command)
+
+				# Speak "I repeat,"
+				command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
+				os.system(command)
+				
+				# Speak the calendar entry text again
+				command = '{0} "{1}"'.format(TTS_SCRIPT, name)
+				os.system(command)
+
+				# play "end of announce" jingle
+				time.sleep(1)
+				os.system('aplay audio_off.wav')
+				time.sleep(1)
+
+				# send a (simulated) IR command to the audio controller, so that it can resume its music playback (or just turn off again)
+				os.system('irsend simulate "0000000000022136 0 KEY_END_ANNOUNCE piremote"')
+				
 				if repeat == False:
 					# wait until the current minute ends, so as not to re-trigger this event, if no repeat condition is specified
 					time.sleep(60)
