@@ -14,7 +14,7 @@ import time
 import os
 import logging
 import logging.handlers
-import sys
+import sys, traceback
 import unicodedata
 import pytz
 
@@ -130,92 +130,102 @@ logger.info("Starting calendars polling & notification loop...")
 
 while True:
 
-	logger.info("Checking calendars...")
+	try:
 
-	# get events from calendar, set for the next 30 days
-	tzone = pytz.timezone('Europe/Paris')
-	now = datetime.now(tz=tzone)
+		logger.info("Checking calendars...")
 
-	timeMin = now
-	timeMin = timeMin.isoformat()
-	timeMax = now + timedelta(days=30)
-	timeMax = timeMax.isoformat()
+		# get events from calendar, set for the next 30 days
+		tzone = pytz.timezone('Europe/Paris')
+		now = datetime.now(tz=tzone)
 
-	eventlist = []
-	defaultReminderDelta = REMINDER_DELTA_DEFAULT
+		timeMin = now
+		timeMin = timeMin.isoformat()
+		timeMax = now + timedelta(days=30)
+		timeMax = timeMax.isoformat()
 
-	# Merge events from all configured calendars
-	for calendar in calendars:
-			events = service.events().list(singleEvents=True, timeMin=timeMin, timeMax=timeMax, calendarId=calendar).execute()
-			if 'items' in events:
-				eventlist += events['items']
+		eventlist = []
+		defaultReminderDelta = REMINDER_DELTA_DEFAULT
 
-			# Grab default reminder time value from calendar settings
-			if ('defaultReminders' in events) and (len(events['defaultReminders'])>0) :
-				defaultReminderDelta = events['defaultReminders'][0]['minutes']
+		# Merge events from all configured calendars
+		for calendar in calendars:
+				events = service.events().list(singleEvents=True, timeMin=timeMin, timeMax=timeMax, calendarId=calendar).execute()
+				if 'items' in events:
+					eventlist += events['items']
 
-	# Check for each collected event if it is about to start
-	for i, event in enumerate(eventlist):
+				# Grab default reminder time value from calendar settings
+				if ('defaultReminders' in events) and (len(events['defaultReminders'])>0) :
+					defaultReminderDelta = events['defaultReminders'][0]['minutes']
 
-		if 'summary' in event and 'start' in event and 'dateTime' in event['start']:
-			# Use this calendar event's summary text as the text to be spoken
-			# Also, remove any accentuated characters from the name (too lazy to handle text encoding properly)
-			name = unicodedata.normalize('NFKD', event['summary'].lower()).encode('ascii', 'ignore')
-			start = event['start']['dateTime'][:-9]
-			description = event.get('description', '')
-			repeat = True if description.lower() == 'repeat' else False
+		# Check for each collected event if it is about to start
+		for i, event in enumerate(eventlist):
 
-			# By default, set announce time to (event start time) - (default value from config or from calendar itself)
-			# Unless some specific reminders are specified in the event
-			reminder_deltatime = defaultReminderDelta
-			if 'reminders' in event:
-				reminders = event['reminders']
+			if 'summary' in event and 'start' in event and 'dateTime' in event['start']:
+				# Use this calendar event's summary text as the text to be spoken
+				# Also, remove any accentuated characters from the name (too lazy to handle text encoding properly)
+				name = unicodedata.normalize('NFKD', event['summary'].lower()).encode('ascii', 'ignore')
+				start = event['start']['dateTime'][:-9]
+				description = event.get('description', '')
+				repeat = True if description.lower() == 'repeat' else False
 
-				if reminders['useDefault'] == False:
-					# Parse overridden reminders to get time value
-					if 'overrides' in reminders:
-						for override in reminders['overrides']:
-							if 	override['method'] == 'popup':
-								reminder_deltatime = override['minutes']
-								break;
+				# By default, set announce time to (event start time) - (default value from config or from calendar itself)
+				# Unless some specific reminders are specified in the event
+				reminder_deltatime = defaultReminderDelta
+				if 'reminders' in event:
+					reminders = event['reminders']
 
-			logger.info('Event #%s, Name: %s, Start: %s, Reminder at %d minutes', i, name, start, reminder_deltatime)
+					if reminders['useDefault'] == False:
+						# Parse overridden reminders to get time value
+						if 'overrides' in reminders:
+							for override in reminders['overrides']:
+								if 	override['method'] == 'popup':
+									reminder_deltatime = override['minutes']
+									break;
 
-			# If the start time of the event is reached, play out a speech synthesis corresponding to the event
-			expiration = now + timedelta(minutes=reminder_deltatime)
-			if start == expiration.strftime('%Y-%m-%dT%H:%M'):
-				
-				# send a (simulated) IR command to the audio controller, so that it can prepare for sound output (mute ongoing music or just turn on amplifier)
-				os.system('irsend simulate "0000000000004660 0 KEY_START_ANNOUNCE piremote"')
-				
-				# play "start of announce" jingle
-				time.sleep(1)
-				os.system('aplay audio_on.wav')
+				logger.info('Event #%s, Name: %s, Start: %s, Reminder at %d minutes', i, name, start, reminder_deltatime)
 
-				# Speak the calendar entry text
-				command = '{0} "{1}"'.format(TTS_SCRIPT, name)
-				logger.info('Event starting in %d minutes. Announcing \'%s\'...', reminder_deltatime, name)
-				os.system(command)
+				# If the start time of the event is reached, play out a speech synthesis corresponding to the event
+				expiration = now + timedelta(minutes=reminder_deltatime)
+				if start == expiration.strftime('%Y-%m-%dT%H:%M'):
+					
+					# send a (simulated) IR command to the audio controller, so that it can prepare for sound output (mute ongoing music or just turn on amplifier)
+					os.system('irsend simulate "0000000000004660 0 KEY_START_ANNOUNCE piremote"')
+					
+					# play "start of announce" jingle
+					time.sleep(1)
+					os.system('aplay audio_on.wav')
 
-				# Speak "I repeat,"
-				command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
-				os.system(command)
-				
-				# Speak the calendar entry text again
-				command = '{0} "{1}"'.format(TTS_SCRIPT, name)
-				os.system(command)
+					# Speak the calendar entry text
+					command = '{0} "{1}"'.format(TTS_SCRIPT, name)
+					logger.info('Event starting in %d minutes. Announcing \'%s\'...', reminder_deltatime, name)
+					os.system(command)
 
-				# play "end of announce" jingle
-				time.sleep(1)
-				os.system('aplay audio_off.wav')
-				time.sleep(1)
+					# Speak "I repeat,"
+					command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
+					os.system(command)
+					
+					# Speak the calendar entry text again
+					command = '{0} "{1}"'.format(TTS_SCRIPT, name)
+					os.system(command)
 
-				# send a (simulated) IR command to the audio controller, so that it can resume its music playback (or just turn off again)
-				os.system('irsend simulate "0000000000022136 0 KEY_END_ANNOUNCE piremote"')
-				
-				if repeat == False:
-					# wait until the current minute ends, so as not to re-trigger this event, if no repeat condition is specified
-					time.sleep(60)
+					# play "end of announce" jingle
+					time.sleep(1)
+					os.system('aplay audio_off.wav')
+					time.sleep(1)
 
-	# Poll calendar every 30 seconds
-	time.sleep(30)
+					# send a (simulated) IR command to the audio controller, so that it can resume its music playback (or just turn off again)
+					os.system('irsend simulate "0000000000022136 0 KEY_END_ANNOUNCE piremote"')
+					
+					if repeat == False:
+						# wait until the current minute ends, so as not to re-trigger this event, if no repeat condition is specified
+						time.sleep(60)
+
+		# Poll calendar every 30 seconds
+		time.sleep(30)
+
+	except:
+		logger.info("*****Exception in main loop, retrying in 30 seconds ******")
+		exc_type, exc_value, exc_traceback = sys.exc_info()
+		traceback.print_exception(exc_type, exc_value, exc_traceback,limit=2, file=sys.stdout)	
+		del exc_traceback
+		time.sleep(30)
+		continue
