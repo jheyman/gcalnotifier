@@ -29,6 +29,8 @@ from oauth2client.client import flow_from_clientsecrets
 
 from ConfigParser import SafeConfigParser
 
+from mstranslator import Translator
+
 ###########################
 # PERSONAL CONFIG FILE READ
 ###########################
@@ -38,6 +40,12 @@ parser.read('gcalnotifier.ini')
 
 # Read private developer for access to the API
 developerKeyString = parser.get('config', 'developerKey')
+
+# Read clientID for Microsoft Translate API
+microsoftClientID = parser.get('config', 'microsoftClientID')
+
+# Read client secret for Microsoft Translate API
+microsoftClientSecret = parser.get('config', 'microsoftClientSecret')
 
 # Read list of calendars to be managed concurrently
 # NOTE: there is a main calendar, the one with which the credentials have been generated
@@ -124,6 +132,16 @@ logger.info("Authentication completed")
 service = build(serviceName='calendar', version='v3', http=http,developerKey=developerKeyString)
 
 ###############################
+# MICROSOFT TRANSLATE ACCESS
+##############################
+
+def speak(theText):
+	trans = Translator(microsoftClientID, microsoftClientSecret)
+	f = open("tmp.wav", 'wb')
+	trans.speak_to_file(f, theText, "fr", format='audio/wav', best_quality=True)
+	os.system("aplay tmp.wav")
+
+###############################
 # GOOGLE CALENDAR POLLING LOOP
 ###############################
 logger.info("Starting calendars polling & notification loop...")
@@ -195,17 +213,20 @@ while True:
 					os.system('aplay audio_on.wav')
 
 					# Speak the calendar entry text
-					command = '{0} "{1}"'.format(TTS_SCRIPT, name)
+					#command = '{0} "{1}"'.format(TTS_SCRIPT, name)
 					logger.info('Event starting in %d minutes. Announcing \'%s\'...', reminder_deltatime, name)
-					os.system(command)
+					#os.system(command)
+					speak(name)
 
 					# Speak "I repeat,"
-					command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
-					os.system(command)
+					#command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
+					#os.system(command)
+					speak("je raipaite")
 					
 					# Speak the calendar entry text again
-					command = '{0} "{1}"'.format(TTS_SCRIPT, name)
-					os.system(command)
+					#command = '{0} "{1}"'.format(TTS_SCRIPT, name)
+					#os.system(command)
+					speak(name)
 
 					# play "end of announce" jingle
 					time.sleep(1)
