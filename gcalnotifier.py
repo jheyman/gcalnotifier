@@ -10,6 +10,7 @@
 
 import gflags
 import httplib2
+import requests
 import time
 import os
 import logging
@@ -38,22 +39,16 @@ from mstranslator import Translator
 parser = SafeConfigParser()
 parser.read('gcalnotifier.ini')
 
-# Read private developer for access to the API
+# Read private developer for access to the google API
 developerKeyString = parser.get('config', 'developerKey')
 
-# Read clientID for Microsoft Translate API
-microsoftClientID = parser.get('config', 'microsoftClientID')
-
-# Read client secret for Microsoft Translate API
-microsoftClientSecret = parser.get('config', 'microsoftClientSecret')
+# Read key for Microsoft Translate API
+microsoftKey = parser.get('config', 'microsoftKey')
 
 # Read list of calendars to be managed concurrently
 # NOTE: there is a main calendar, the one with which the credentials have been generated
 # Additional calendars must be configured as shared with this main calendar.
 calendars = parser.get('config', 'calendars').split(',')
-
-# Read Text-To-Speech command line
-TTS_SCRIPT = parser.get('config', 'tts_cmd')
 
 # Read path to log file
 LOG_FILENAME = parser.get('config', 'log_filename')
@@ -98,9 +93,9 @@ sys.stdout = MyLogger(logger, logging.INFO)
 sys.stderr = MyLogger(logger, logging.ERROR)
 
 logger.info('Starting Google Calendar Polling and Notification Service')
-logger.info('Using developerkey %s' % developerKeyString)
+logger.info('Using google developerkey %s' % developerKeyString)
+logger.info('Using microsoft speed key %s' % microsoftKey)
 logger.info('Using calendar list: ' + str(calendars))
-logger.info("Using Text-to-Speech command: %s" % TTS_SCRIPT)
 logger.info("Beginning authentication...")
 
 ###############################
@@ -132,13 +127,45 @@ logger.info("Authentication completed")
 service = build(serviceName='calendar', version='v3', http=http,developerKey=developerKeyString)
 
 ###############################
+# MICROSOFT SPEECH SETUP
+###############################
+
+headers = {"Ocp-Apim-Subscription-Key": microsoftKey}
+
+url = 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken'
+r = requests.post(url, data = {'key':'value'}, headers=headers)
+
+logger.info("Microsoft speech access token request returned "+str(r.status_code))
+
+accesstoken = r.text.decode("UTF-8")
+logger.info("Access Token: " + accesstoken)
+
+###############################
 # MICROSOFT TRANSLATE ACCESS
 ##############################
 
 def speak(theText):
-	trans = Translator(microsoftClientID, microsoftClientSecret)
+
 	f = open("tmp.wav", 'wb')
-	trans.speak_to_file(f, theText, "fr", format='audio/wav', best_quality=True)
+
+	body = "<speak version='1.0' xml:lang='fr-FR'><voice xml:lang='fr-FR' xml:gender='Female' name='Microsoft Server Speech Text to Speech Voice (fr-FR, Julie, Apollo)'>"+theText+"</voice></speak>"
+
+	headers = {"Content-type": "application/ssml+xml", 
+	            "X-Microsoft-OutputFormat": "riff-16khz-16bit-mono-pcm", 
+	            "Authorization": "Bearer " + accesstoken, 
+	            "X-Search-AppId": "07D3234E49CE426DAA29772419F436CA", 
+	            "X-Search-ClientID": "1ECFAE91408841A480F00935DC390960", 
+	            "User-Agent": "TTSForPython"}
+            
+	url = 'https://speech.platform.bing.com/synthesize'
+
+	r = requests.post(url, data = body, headers=headers)
+	logger.info(str(r.status_code))
+	logger.info(r.reason)
+
+	f.write(r.content)
+	f.close()
+
 	os.system("aplay tmp.wav")
 
 ###############################
@@ -213,19 +240,13 @@ while True:
 					os.system('aplay audio_on.wav')
 
 					# Speak the calendar entry text
-					#command = '{0} "{1}"'.format(TTS_SCRIPT, name)
 					logger.info('Event starting in %d minutes. Announcing \'%s\'...', reminder_deltatime, name)
-					#os.system(command)
 					speak(name)
 
 					# Speak "I repeat,"
-					#command = '{0} "{1}"'.format(TTS_SCRIPT, "je raipaite") # stupid workaround to get the right pronunciation since french accents are not processed correctly
-					#os.system(command)
 					speak("je raipaite")
 					
 					# Speak the calendar entry text again
-					#command = '{0} "{1}"'.format(TTS_SCRIPT, name)
-					#os.system(command)
 					speak(name)
 
 					# play "end of announce" jingle
