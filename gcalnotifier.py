@@ -160,6 +160,7 @@ def speak(theText):
 	url = 'https://speech.platform.bing.com/synthesize'
 
 	r = requests.post(url, data = body, headers=headers)
+	logger.info("Submitting text to speech (" + theText +") request using access token: " + accesstoken)
 	logger.info(str(r.status_code))
 	logger.info(r.reason)
 
