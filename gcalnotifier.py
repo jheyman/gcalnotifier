@@ -127,25 +127,23 @@ logger.info("Authentication completed")
 service = build(serviceName='calendar', version='v3', http=http,developerKey=developerKeyString)
 
 ###############################
-# MICROSOFT SPEECH SETUP
-###############################
-
-headers = {"Ocp-Apim-Subscription-Key": microsoftKey}
-
-url = 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken'
-r = requests.post(url, data = {'key':'value'}, headers=headers)
-
-logger.info("Microsoft speech access token request returned "+str(r.status_code))
-
-accesstoken = r.text.decode("UTF-8")
-logger.info("Access Token: " + accesstoken)
-
-###############################
 # MICROSOFT TRANSLATE ACCESS
 ##############################
 
 def speak(theText):
 
+	# First get access token
+	headers = {"Ocp-Apim-Subscription-Key": microsoftKey}
+
+	url = 'https://api.cognitive.microsoft.com/sts/v1.0/issueToken'
+	r = requests.post(url, data = {'key':'value'}, headers=headers)
+
+	logger.info("Microsoft speech access token request returned "+str(r.status_code))
+
+	accesstoken = r.text.decode("UTF-8")
+	logger.info("Access Token: " + accesstoken)
+
+	# Then proceed to request sound data corresponding to the desired text, and save it to a file
 	f = open("tmp.wav", 'wb')
 
 	body = "<speak version='1.0' xml:lang='fr-FR'><voice xml:lang='fr-FR' xml:gender='Female' name='Microsoft Server Speech Text to Speech Voice (fr-FR, Julie, Apollo)'>"+theText+"</voice></speak>"
@@ -160,13 +158,14 @@ def speak(theText):
 	url = 'https://speech.platform.bing.com/synthesize'
 
 	r = requests.post(url, data = body, headers=headers)
-	logger.info("Submitting text to speech (" + theText +") request using access token: " + accesstoken)
+	logger.info("Submitting text to speech (" + theText +") request ")
 	logger.info(str(r.status_code))
 	logger.info(r.reason)
 
 	f.write(r.content)
 	f.close()
 
+	# finally, play the generated sound
 	os.system("aplay tmp.wav")
 
 ###############################
