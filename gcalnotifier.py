@@ -94,7 +94,7 @@ sys.stderr = MyLogger(logger, logging.ERROR)
 
 logger.info('Starting Google Calendar Polling and Notification Service')
 logger.info('Using google developerkey %s' % developerKeyString)
-logger.info('Using microsoft speed key %s' % microsoftKey)
+logger.info('Using microsoft speech key %s' % microsoftKey)
 logger.info('Using calendar list: ' + str(calendars))
 logger.info("Beginning authentication...")
 
